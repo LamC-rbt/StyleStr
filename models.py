@@ -102,3 +102,42 @@ class RecurrentStyleBlock(torch.nn.Module):
         output = self.relu(self.fusion_norm(self.fusion_conv(combined)))
         
         return output, new_state
+
+
+class ConvLayer(torch.nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride):
+        super().__init__()
+        self.conv2d = torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding=kernel_size//2, padding_mode='reflect')
+
+    def forward(self, x):
+        return self.conv2d(x)
+
+
+class ResidualBlock(torch.nn.Module):
+    def __init__(self, channels):
+        super(ResidualBlock, self).__init__()
+        kernel_size = 3
+        stride_size = 1
+        self.conv1 = ConvLayer(channels, channels, kernel_size=kernel_size, stride=stride_size)
+        self.in1 = torch.nn.InstanceNorm2d(channels, affine=True)
+        self.conv2 = ConvLayer(channels, channels, kernel_size=kernel_size, stride=stride_size)
+        self.in2 = torch.nn.InstanceNorm2d(channels, affine=True)
+        self.relu = torch.nn.ReLU()
+
+    def forward(self, x):
+        residual = x
+        out = self.relu(self.in1(self.conv1(x)))
+        out = self.in2(self.conv2(out))
+        return out + residual  # modification: no ReLu after the addition
+
+
+class UpsampleConvLayer(torch.nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride):
+        super().__init__()
+        self.upsampling_factor = stride
+        self.conv2d = ConvLayer(in_channels, out_channels, kernel_size, stride=1)
+
+    def forward(self, x):
+        if self.upsampling_factor > 1:
+            x = torch.nn.functional.interpolate(x, scale_factor=self.upsampling_factor, mode='nearest')
+        return self.conv2d(x)
